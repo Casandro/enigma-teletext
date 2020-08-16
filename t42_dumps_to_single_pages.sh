@@ -1,24 +1,34 @@
 #!/bin/bash
 
-T42DIR=/daten_fokker/t42
-ZIPDIR=/daten_fokker/zip
+T42DIR=/daten_server/teletext/in
+T42DONE=$T42DIR/done
+
+T42SPLIT=/daten_server/teletext/split
 
 
-dt=`date -d "Yesterday" +%Y%m%d`
-echo $dt
+mkdir -p $T42DONE
 
-for x in $T42DIR/$dt/*.t42
+mkdir -p $T42SPLIT
+
+
+
+for x in $T42DIR/*.t42
 do
 	if [ -f "$x" ]
 	then
 		bn=`basename "$x" .t42`
-		t42_date=`echo "$bn" | cut -d "-" -f 1`
-		tmp=`mktemp`
-		mkdir "$tmp-dir"
-		src/split_t42_pages_ram "$tmp-dir/%s" < "$x"
-		zip $ZIPDIR/$bn.zip "$tmp-dir"
-		rm -r "$tmp-dir"
-		rm "$tmp"
+		station=`echo $bn | cut -d "." -f 1`
+		dt=`echo $bn | cut -d "." -f 2 | cut -d "_" -f 1`
+		echo $bn $station $dt
+
+		mkdir -p $T42SPLIT/$station
+		src/split_t42_to_pages_ram $T42SPLIT/$station $dt < $x && mv $x $T42DONE
 	fi
 
+done
+
+
+for x in $T42SPLIT/*
+do
+	src/delete_double $x
 done
