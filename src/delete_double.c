@@ -89,7 +89,10 @@ int main(int argc, char *argv[])
 		if (hashtable[entry]==NULL) { //No matching entry found
 			size_t s=strlen(fn)+1;
 			char *p=malloc(s);
-			if (p==NULL) printf("malloc failed\n");
+			if (p==NULL) {
+				printf("malloc failed\n");
+				return 1;
+			}
 			strcpy(p, fn);
 			hashtable[entry]=p;
 		} else {
@@ -99,6 +102,5 @@ int main(int argc, char *argv[])
 				unlink(fn);
 			}
 		}
-		int m;
 	}
 }
