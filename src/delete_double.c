@@ -67,6 +67,7 @@ uint64_t calculate_page_hash(const char *fn)
 		s=s<<(n%(64-7));
 		hash=hash^(s);
 	}
+	fclose(f);
 	return hash;
 }
 
