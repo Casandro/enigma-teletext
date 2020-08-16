@@ -6,6 +6,8 @@
 #include<strings.h>
 
 
+#define HASHSIZE (32*1024*1024)
+
 #define BIT(x, y) ((x>>y)&0x1)
 int de_hamm(uint8_t x)
 {
@@ -50,6 +52,27 @@ int compare_pages(const char *fn1, const char *fn2)
 
 }
 
+uint64_t calculate_page_hash(const char *fn)
+{
+	FILE *f=fopen(fn, "r");
+	uint8_t buf[4096]; //No teletext page will ever be that large
+	fread(buf, 1, 42, f); //Skip first 42 octets;
+	memset(buf, 0, sizeof(buf));
+	size_t r=fread(buf, 1, sizeof(buf), f);
+	uint64_t hash=0;
+	int n;
+	for (n=0; n<r; n++) {
+		uint64_t s=buf[n];
+		s=s<<(n%(64-7));
+		hash=hash^(s);
+	}
+	return hash;
+}
+
+
+char *hashtable[HASHSIZE]={NULL};
+
+
 int main(int argc, char *argv[])
 {
 	if (argc<2) {
@@ -57,19 +80,25 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	if (argc<4) return 1;
+	memset(hashtable, 0, sizeof(hashtable));
 	int n;
 	for (n=1; n<argc-1; n++) {
-		int m;
-		for (m=n+1; m<argc-1; m++)  {
-//			printf("Comparing %p with %p... ", argv[n], argv[m]);
-//			printf("Comparing %s with %s... ", argv[n], argv[m]);
-			int cres=compare_pages(argv[n], argv[m]);
+		char *fn=argv[n];
+		uint64_t h=calculate_page_hash(fn);
+		uint64_t entry=h%HASHSIZE;
+		if (hashtable[entry]==NULL) { //No matching entry found
+			size_t s=strlen(fn)+1;
+			char *p=malloc(s);
+			if (p==NULL) printf("malloc failed\n");
+			strcpy(p, fn);
+			hashtable[entry]=p;
+		} else {
+			int cres=compare_pages(fn, hashtable[entry]);
 			if (cres==0) {
-				printf("deleting %s\n",argv[m]);
-				unlink(argv[m]);
+				printf("deleting %s\n",fn);
+				unlink(fn);
 			}
-//			if (cres<0) printf("error\n");
-//			if (cres>0) printf("different\n");
 		}
+		int m;
 	}
 }
