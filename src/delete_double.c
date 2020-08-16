@@ -55,6 +55,7 @@ int compare_pages(const char *fn1, const char *fn2)
 uint64_t calculate_page_hash(const char *fn)
 {
 	FILE *f=fopen(fn, "r");
+	if (f==NULL) return -1;
 	uint8_t buf[4096]; //No teletext page will ever be that large
 	fread(buf, 1, 42, f); //Skip first 42 octets;
 	memset(buf, 0, sizeof(buf));
