@@ -2,5 +2,5 @@
 
 for x in *.c
 do
-	gcc -o `basename $x .c` $x
+	gcc -Wall  -o `basename $x .c` $x || exit
 done

@@ -4,6 +4,9 @@
 #include<stdint.h>
 #include<string.h>
 #include<strings.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
 
 
 #define BIT(x, y) ((x>>y)&0x1)
@@ -11,6 +14,15 @@ int de_hamm(uint8_t x)
 {
 	return BIT(x,1) | (BIT(x,3)<<1) | (BIT(x,5)<<2) | (BIT(x,7)<<3);
 }
+
+int population_count(uint8_t x)
+{
+	int cnt=0;
+	int n;
+	for (n=0; n<8; n++) if ((x>>n)&1!=0) cnt=cnt+1;
+	return cnt;
+}
+
 
 typedef struct packet_s {
 	struct packet_s *next;
@@ -139,17 +151,40 @@ void write_line_to_file(FILE *f, packet_t *p)
 	return write_line_to_file(f, p->next);
 }
 
-void write_page(const char *path, const page_t *p)
+void create_path(const char *path)
+{
+	if (*path==0) return;
+
+	size_t len=strlen(path)+1;
+	char *p2=malloc(len);
+	memset(p2, 0, len); 
+	strncpy(p2, path, len);
+	char *s=strrchr(p2, '/');
+	
+	if (s!=NULL) {
+		*s=0;
+		create_path(p2);
+	}
+	free(p2);
+	mkdir(path, 0777);
+}
+
+void write_page(const char *path, const char *date, const page_t *p)
 {
 	if (p==NULL) return;
 	int magazine=p->pageno>>8;
 	if (magazine==0) magazine=8;
-	char fn[100];
-	snprintf(fn, sizeof(fn), "%03x-%04x-%s", (p->pageno&0xff)|(magazine<<8), p->subpage, p->time);
-	char ofn[strlen(fn)+strlen(path)+2];
-	snprintf(ofn, sizeof(ofn), path, fn);
-	printf("File: %s\n", ofn);
-	FILE *f=fopen(ofn, "w");
+	char pth[1024];
+	snprintf(pth, sizeof(pth), "%s/%03x/%04x",path, (p->pageno&0xff)|(magazine<<8), p->subpage);
+      	create_path(pth);	
+	char fn[1024];
+	snprintf(fn, sizeof(fn), "%s/%s-%s.t42", pth, date, p->time);
+//	printf("File: %s\n", fn);
+	FILE *f=fopen(fn, "w");
+	if (f==NULL) {
+		printf("fopen failed for %s, %s\n", fn, strerror(errno));
+		return;
+	}
 	write_line_to_file(f, p->first_packet);
 	fclose(f);
 }
@@ -157,11 +192,16 @@ void write_page(const char *path, const page_t *p)
 
 int main(int argc, char *argv[])
 {
-	if (argc!=2) {
-		printf("Usage: %s <output-directory>\n", argv[0]);
-		return 1;
-	}
+
 	char *output_directory=argv[1];
+	char *date=argv[2];
+	if (argc!=3) {
+		printf("Usage: %s <output-directory> <date>\n", argv[0]);
+		//return 1;
+		output_directory="/tmp/irgendwas";
+		date="12345";
+	} 
+
 
 	page_t *all_pages[0x800];
 	memset(all_pages, 0 ,sizeof(all_pages));
@@ -179,24 +219,35 @@ int main(int argc, char *argv[])
 			int page=de_hamm(packet[3])<<4 | de_hamm(packet[2]);
 			int sub=(de_hamm(packet[4])) | (de_hamm(packet[6])<<4) | (de_hamm(packet[6])<<8) | (de_hamm(packet[7])<<12);
 			int subpage=sub&0x3f7f;
+			int timestart=34;
+			while ((packet[timestart+7]<=' ') && (timestart>10)) timestart=timestart-1;
 			char time[9];
 			memset(time, 0, sizeof(time));
 			int n;
 			for (n=0; n<8; n++) {
-				char c=packet[34+n]&0x7f;
+				char c=packet[timestart+n]&0x7f;
 				if (c<'0') c='-'; else
 				if (c>'9') c='-';
 				time[n]=c;
 			}
+//			printf("%s\n",time);
 			if (pages[magazine]!=NULL) {
 				uint16_t pn=pages[magazine]->pageno;
 				page_t *p=add_page_if_not_equal(all_pages[pn], pages[magazine]);
 				if (all_pages[pn]==NULL) all_pages[pn]=p;
-				if (p!=NULL) write_page(output_directory, p);
+				if (p!=NULL) write_page(output_directory, date, p);
 				pages[magazine]=NULL;
 			}
+			
+			int parity_errors=0;
 
-			if (page!=0xff) {
+			for (n=8; n<42; n++) {
+				if (population_count(packet[n])%2==1) {
+					parity_errors=parity_errors+1;
+				}
+			}
+
+			if ( (page!=0xff) && (parity_errors==0) ){
 				pages[magazine]=create_page(magazine<<8|page,subpage, time);
 			}
 		}
